@@ -47,6 +47,8 @@ def EpsOrClips(show_title, show_link):
 			oc.add(DirectoryObject(key=Callback(ClipBrowser, show_url=link.get('href'), show_title=show_title), title="Video Clips"))
 		else:
 			pass
+	if len(oc) < 1:
+		return ObjectContainer(header="Empty", message="No content found.")
 	return oc
 
 ####################################################################################################
