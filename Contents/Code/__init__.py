@@ -25,6 +25,7 @@ def MainMenu():
 
 	oc.add(DirectoryObject(key=Callback(ShowList, group="Full Episodes", url='/full-episodes/'), title="Full Episodes"))
 	oc.add(DirectoryObject(key=Callback(ShowList, group="Video Clips", url='/video-clips/'), title="Clips"))
+	oc.add(DirectoryObject(key=Callback(ShowList, group="Web Series", url='/video-clips/'), title="Web Series"))
 
 	return oc
 
@@ -36,7 +37,11 @@ def ShowList(group, url):
 	list_url = BASE_URL + url
 	
 	data = HTML.ElementFromURL(list_url)
-	show_list = data.xpath('//div[@class="background_sibling"]//ul')[0]
+	if group == "Video Clips":
+		index = 0
+	elif group == "Web Series":
+		index = 1
+	show_list = data.xpath('//div[@class="background_sibling"]//ul')[1]
 	for show in show_list.xpath('./li/a'):
 		show_url = show.get('href')
 		show_title = RE_TITLE.search(show.text).group(1)
