@@ -54,6 +54,10 @@ def EpsOrClips(show_title, show_link):
 def ShowBrowser(show_url, show_title):
 	oc = ObjectContainer(title2=show_title)
 	
+	if show_url.startswith('http://'):
+		pass
+	else:
+		show_url = BASE_URL + show_url
 	data = HTML.ElementFromURL(show_url)
 	for season in data.xpath('//ul[@class="season_navigation"]//a'):
 		season_title 	= season.text
@@ -116,6 +120,11 @@ def EpisodeBrowser(show_title, season_url, season_title=None):
 @route("/video/spike/clipbrowser")
 def ClipBrowser(show_url, show_title):
 	oc = ObjectContainer(title2=show_title)
+	
+	if show_url.startswith('http://'):
+		pass
+	else:
+		show_url = BASE_URL + show_url
 	
 	data = HTML.ElementFromURL(show_url)
 	for clip in data.xpath('//div[@id="show_clips_res"]//div[@class="block"]'):
