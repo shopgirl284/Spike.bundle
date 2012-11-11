@@ -22,34 +22,31 @@ def Start():
 def MainMenu():
 
 	oc = ObjectContainer()
-
-	oc.add(DirectoryObject(key=Callback(ShowList, group="Full Episodes", url='/full-episodes/'), title="Full Episodes"))
-	oc.add(DirectoryObject(key=Callback(ShowList, group="Video Clips", url='/video-clips/'), title="Clips"))
-	oc.add(DirectoryObject(key=Callback(ShowList, group="Web Series", url='/video-clips/'), title="Web Series"))
+	data = HTML.ElementFromURL(BASE_URL + '/shows/')
+	for show in data.xpath('//div[@class="module  primetime_and_originals"]//li/a'):
+		show_title = show.text
+		show_link = show.get('href')
+		if '/events/' in show_link or '/shows/e3' in show_link:
+			continue
+		else:
+			oc.add(DirectoryObject(key=Callback(EpsOrClips, show_title=show_title, show_link=show_link), title=show_title))
+	
+	oc.objects.sort(key = lambda obj: obj.title)
 
 	return oc
 
 ####################################################################################################
-@route("/video/spike/showlist")
-def ShowList(group, url):
-	oc = ObjectContainer(title2=group)
-
-	list_url = BASE_URL + url
-	
-	data = HTML.ElementFromURL(list_url)
-	if group == "Video Clips":
-		index = 0
-	elif group == "Web Series":
-		index = 1
-	show_list = data.xpath('//div[@class="background_sibling"]//ul')[1]
-	for show in show_list.xpath('./li/a'):
-		show_url = show.get('href')
-		show_title = RE_TITLE.search(show.text).group(1)
-		if url == '/full-episodes/':
-			oc.add(DirectoryObject(key=Callback(ShowBrowser, show_url=show_url, show_title=show_title), title=show_title))
-		elif url == '/video-clips/':
-			oc.add(DirectoryObject(key=Callback(ClipBrowser, show_url=show_url, show_title=show_title), title=show_title))
-		
+@route("/video/spike/epsorclips")
+def EpsOrClips(show_title, show_link):
+	oc = ObjectContainer(title2=show_title)
+	data = HTML.ElementFromURL(BASE_URL + show_link)
+	for link in data.xpath('//div[@class="menu"]//li/a'):
+		if link.text == "Full Episodes":
+			oc.add(DirectoryObject(key=Callback(ShowBrowser, show_url=link.get('href'), show_title=show_title), title="Full Episodes"))
+		elif link.text == "Video Clips" or link.text == "Videos":
+			oc.add(DirectoryObject(key=Callback(ClipBrowser, show_url=link.get('href'), show_title=show_title), title="Video Clips"))
+		else:
+			pass
 	return oc
 
 ####################################################################################################
@@ -72,9 +69,9 @@ def ShowBrowser(show_url, show_title):
 def EpisodeBrowser(show_title, season_url, season_title=None):
 	oc = ObjectContainer(title1=show_title, title2=season_title)
 	
-	if season_title:
+	try:
 		season_index = RE_SEASON.search(season_title).group(1)
-	else:
+	except:
 		season_index = None
 	
 	data = HTML.ElementFromURL(season_url)
