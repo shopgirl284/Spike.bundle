@@ -10,6 +10,7 @@ ART 		= "art-default.jpg"
 
 ####################################################################################################
 def Start():
+
 	ObjectContainer.art = R(ART)
 	DirectoryObject.thumb = R(ICON)
 	ObjectContainer.title1 = "Spike"
@@ -18,11 +19,12 @@ def Start():
 	HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.7; rv:13.0) Gecko/20100101 Firefox/13.0.1'
 
 ####################################################################################################
-@handler("/video/spike", "Spike", ICON, ART)
+@handler("/video/spike", "Spike", thumb=ICON, art=ART)
 def MainMenu():
 
 	oc = ObjectContainer()
 	data = HTML.ElementFromURL(BASE_URL + '/shows/')
+
 	for show in data.xpath('//div[@class="module  primetime_and_originals"]//li/a'):
 		show_title = show.text
 		show_link = show.get('href')
@@ -30,7 +32,7 @@ def MainMenu():
 			continue
 		else:
 			oc.add(DirectoryObject(key=Callback(EpsOrClips, show_title=show_title, show_link=show_link), title=show_title))
-	
+
 	oc.objects.sort(key = lambda obj: obj.title)
 
 	return oc
@@ -38,8 +40,10 @@ def MainMenu():
 ####################################################################################################
 @route("/video/spike/epsorclips")
 def EpsOrClips(show_title, show_link):
+
 	oc = ObjectContainer(title2=show_title)
 	data = HTML.ElementFromURL(BASE_URL + show_link)
+
 	for link in data.xpath('//div[@class="menu"]//li/a'):
 		if link.text == "Full Episodes":
 			oc.add(DirectoryObject(key=Callback(ShowBrowser, show_url=link.get('href'), show_title=show_title), title="Full Episodes"))
@@ -47,40 +51,47 @@ def EpsOrClips(show_title, show_link):
 			oc.add(DirectoryObject(key=Callback(ClipBrowser, show_url=link.get('href'), show_title=show_title), title="Video Clips"))
 		else:
 			pass
+
 	if len(oc) < 1:
 		return ObjectContainer(header="Empty", message="No content found.")
+
 	return oc
 
 ####################################################################################################
 @route("/video/spike/showbrowser")
 def ShowBrowser(show_url, show_title):
+
 	oc = ObjectContainer(title2=show_title)
-	
+
 	if show_url.startswith('http://'):
 		pass
 	else:
 		show_url = BASE_URL + show_url
 	data = HTML.ElementFromURL(show_url)
+
 	for season in data.xpath('//ul[@class="season_navigation"]//a'):
 		season_title 	= season.text
 		season_url 	= season.get('href')
 		oc.add(DirectoryObject(key=Callback(EpisodeBrowser, show_title=show_title, season_url=season_url, season_title=season_title), title=season_title))
-	
+
 	if len(oc) == 1:
 		return EpisodeBrowser(show_title=show_title, season_url=season_url)
+
 	return oc
 
 ####################################################################################################
 @route("/video/spike/episodebrowser")
 def EpisodeBrowser(show_title, season_url, season_title=None):
+
 	oc = ObjectContainer(title1=show_title, title2=season_title)
-	
+
 	try:
 		season_index = RE_SEASON.search(season_title).group(1)
 	except:
 		season_index = None
-	
+
 	data = HTML.ElementFromURL(season_url)
+
 	for ep in data.xpath('//div[contains(@class, "full_episode ")]'):
 		try:
 			ep_url	= ep.xpath('.//a[@class="title"]')[0].get('href')
@@ -143,7 +154,7 @@ def ClipBrowser(show_url, show_title):
 		except:
 			clip_date = None
 		clip_summary = clip.xpath('.//div[@class="af_content"]/p')[0].text
-		
+
 		oc.add(VideoClipObject(url=clip_url, title=clip_title, summary=clip_summary, duration=clip_duration, originally_available_at=clip_date,
 			thumb=Resource.ContentsOfURLWithFallback(url=clip_thumb, fallback=ICON)))
 
@@ -154,5 +165,5 @@ def ClipBrowser(show_url, show_title):
 			oc.add(NextPageObject(key=Callback(ClipBrowser, show_url=next_url, show_title=show_title), title="Next Page", thumb=R(ICON)))
 	except:
 		pass
-	
+
 	return oc
