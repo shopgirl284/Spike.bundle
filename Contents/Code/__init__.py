@@ -142,9 +142,7 @@ def ClipBrowser(show_url, show_title):
 	data = HTML.ElementFromURL(show_url)
 	for clip in data.xpath('//div[@id="show_clips_res"]//div[@class="block"]'):
 		clip_url 	= clip.xpath('.//a')[0].get('href')
-		Log(clip_url)
 		clip_thumb 	= clip.xpath('.//img')[0].get('src').split('?')[0]
-		Log(clip_thumb)
 		clip_title 	= clip.xpath('.//h3/a')[0].text
 		clip_runtime	= clip.xpath('.//h3/small')[0].text.strip('(').strip(')')
 		clip_duration	= Datetime.MillisecondsFromString(clip_runtime)
