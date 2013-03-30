@@ -106,9 +106,9 @@ def EpisodeBrowser(show_title, season_url, season_title=None):
 		except:
 			ep_runtime	= None
 		if season_index:
-			ep_index	= ep_url.split('-')[-1].replace(season_index, '', 1).lstrip('0')
+			ep_index	= ep_url.split('-')[-1].replace(season_index, '', 1).lstrip('0').strip('s')
 		else:
-			ep_index	= ep_url.split('-')[-1]
+			ep_index	= ep_url.split('-')[-1].strip('s')
 		ep_airdate	= ep.xpath('.//p[@class="aired_available"]/text()')[1]
 		ep_date 	= Datetime.ParseDate(ep_airdate).date()
 		
