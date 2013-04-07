@@ -100,9 +100,9 @@ def EpisodeBrowser(show_title, season_url, season_title=None):
 		except:
 			ep_runtime	= None
 		if season_index:
-			ep_index	= ep_url.split('-')[-1].replace(season_index, '', 1).lstrip('0')
+			ep_index	= ep_url.split('-')[-1].replace(season_index, '', 1).lstrip('0').strip('s')
 		else:
-			ep_index	= ep_url.split('-')[-1]
+			ep_index	= ep_url.split('-')[-1].strip('s')
 		ep_airdate	= ep.xpath('.//p[@class="aired_available"]/text()')[1]
 		ep_date 	= Datetime.ParseDate(ep_airdate).date()
 		
@@ -136,9 +136,7 @@ def ClipBrowser(show_url, show_title):
 	data = HTML.ElementFromURL(show_url)
 	for clip in data.xpath('//div[@id="show_clips_res"]//div[@class="block"]'):
 		clip_url 	= clip.xpath('.//a')[0].get('href')
-		Log(clip_url)
 		clip_thumb 	= clip.xpath('.//img')[0].get('src').split('?')[0]
-		Log(clip_thumb)
 		clip_title 	= clip.xpath('.//h3/a')[0].text
 		clip_runtime	= clip.xpath('.//h3/small')[0].text.strip('(').strip(')')
 		clip_duration	= Datetime.MillisecondsFromString(clip_runtime)
