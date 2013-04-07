@@ -5,21 +5,15 @@ BASE_URL 	= "http://www.spike.com"
 MRSS_PATH 	= "http://www.comedycentral.com/feeds/mrss?uri=%s"
 MRSS_NS 	= {"media": "http://search.yahoo.com/mrss/"}
 
-ICON 		= "icon-default.png"
-ART 		= "art-default.jpg"
-
 ####################################################################################################
 def Start():
 
-	ObjectContainer.art = R(ART)
-	DirectoryObject.thumb = R(ICON)
 	ObjectContainer.title1 = "Spike"
-
 	HTTP.CacheTime = CACHE_1HOUR
 	HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.7; rv:13.0) Gecko/20100101 Firefox/13.0.1'
 
 ####################################################################################################
-@handler("/video/spike", "Spike", thumb=ICON, art=ART)
+@handler("/video/spike", "Spike")
 def MainMenu():
 
 	oc = ObjectContainer()
@@ -114,16 +108,16 @@ def EpisodeBrowser(show_title, season_url, season_title=None):
 		
 		if season_index:
 			oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, duration=ep_duration, index=int(ep_index), season=int(season_index),
-				originally_available_at=ep_date, thumb=Resource.ContentsOfURLWithFallback(url=ep_thumb, fallback=ICON)))
+				originally_available_at=ep_date, thumb=Resource.ContentsOfURLWithFallback(url=ep_thumb)))
 		else:
 			oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, duration=ep_duration, absolute_index=int(ep_index),
-				originally_available_at=ep_date, thumb=Resource.ContentsOfURLWithFallback(url=ep_thumb, fallback=ICON)))
+				originally_available_at=ep_date, thumb=Resource.ContentsOfURLWithFallback(url=ep_thumb)))
 	
 	try:
 		next_page = data.xpath('//div[@class="pagination"]//a')[-1]
 		if next_page.text == 'Next':
 			next_url = next_page.get('href')
-			oc.add(NextPageObject(key=Callback(EpisodeBrowser, show_title=show_title, season_url=next_url, season_title=season_title), title="Next Page", thumb=R(ICON)))
+			oc.add(NextPageObject(key=Callback(EpisodeBrowser, show_title=show_title, season_url=next_url, season_title=season_title), title="Next Page"))
 	except:
 		pass
 	
@@ -156,13 +150,13 @@ def ClipBrowser(show_url, show_title):
 		clip_summary = clip.xpath('.//div[@class="af_content"]/p')[0].text
 
 		oc.add(VideoClipObject(url=clip_url, title=clip_title, summary=clip_summary, duration=clip_duration, originally_available_at=clip_date,
-			thumb=Resource.ContentsOfURLWithFallback(url=clip_thumb, fallback=ICON)))
+			thumb=Resource.ContentsOfURLWithFallback(url=clip_thumb)))
 
 	try:
 		next_page = data.xpath('//div[@class="pagination"]//a')[-1]
 		if next_page.text == 'Next':
 			next_url = next_page.get('href')
-			oc.add(NextPageObject(key=Callback(ClipBrowser, show_url=next_url, show_title=show_title), title="Next Page", thumb=R(ICON)))
+			oc.add(NextPageObject(key=Callback(ClipBrowser, show_url=next_url, show_title=show_title), title="Next Page"))
 	except:
 		pass
 
