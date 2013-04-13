@@ -121,6 +121,10 @@ def EpisodeBrowser(show_title, season_url, season_title=None):
 	except:
 		pass
 	
+	if len(oc) == 0:
+		Log('empty container')
+		return ObjectContainer(header="Spike", message="There are no titles available for the requested item.")
+	
 	return oc
 
 ####################################################################################################
