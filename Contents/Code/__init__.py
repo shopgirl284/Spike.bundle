@@ -39,7 +39,7 @@ def EpsOrClips(show_title, show_link):
 	data = HTML.ElementFromURL(BASE_URL + show_link)
 
 	for link in data.xpath('//div[@class="menu"]//li/a'):
-		if link.text == "Full Episodes":
+		if link.text == "Full Episodes" or link.text == "Episodes":
 			oc.add(DirectoryObject(key=Callback(ShowBrowser, show_url=link.get('href'), show_title=show_title), title="Full Episodes"))
 		elif link.text == "Video Clips" or link.text == "Videos":
 			oc.add(DirectoryObject(key=Callback(ClipBrowser, show_url=link.get('href'), show_title=show_title), title="Video Clips"))
@@ -57,15 +57,14 @@ def ShowBrowser(show_url, show_title):
 
 	oc = ObjectContainer(title2=show_title)
 
-	if show_url.startswith('http://'):
-		pass
-	else:
+	if not show_url.startswith('http://'):
 		show_url = BASE_URL + show_url
+
 	data = HTML.ElementFromURL(show_url)
 
 	for season in data.xpath('//ul[@class="season_navigation"]//a'):
-		season_title 	= season.text
-		season_url 	= season.get('href')
+		season_title = season.text
+		season_url = season.get('href')
 		oc.add(DirectoryObject(key=Callback(EpisodeBrowser, show_title=show_title, season_url=season_url, season_title=season_title), title=season_title))
 
 	if len(oc) == 1:
@@ -86,31 +85,35 @@ def EpisodeBrowser(show_title, season_url, season_title=None):
 
 	data = HTML.ElementFromURL(season_url)
 
-	for ep in data.xpath('//div[contains(@class, "full_episode ")]'):
+	for ep in data.xpath('//div[contains(@class, "episode_guide")]'):
 		try:
-			ep_url	= ep.xpath('.//a[@class="title"]')[0].get('href')
+			ep_url = ep.xpath('.//a[@class="title"]')[0].get('href')
+			Log(ep_url)
 		except:
 			continue
-		ep_title 	= ep.xpath('.//img')[0].get('title')
-		ep_thumb	= ep.xpath('.//img')[0].get('src').split('?')[0]
-		ep_summary	= ep.xpath('.//div[@class="short_desc"]//p')[0].text.strip()
-		try:
-			ep_runtime	= ep.xpath('.//span[@class="run_time"]')[0].text.strip('(').strip(')')
-			ep_duration	= Datetime.MillisecondsFromString(ep_runtime)
-		except:
-			ep_runtime	= None
+
+		ep_title = ep.xpath('.//img')[0].get('title')
+		Log(ep_title)
+		ep_thumb = ep.xpath('.//img')[0].get('src').split('?')[0]
+		Log(ep_thumb)
+		ep_summary = ep.xpath('.//div[@class="description"]//p')[0].text.strip()
+		Log(ep_summary)
+
 		if season_index:
-			ep_index	= ep_url.split('-')[-1].replace(season_index, '', 1).lstrip('0').strip('s')
+			ep_index = ep_url.split('-')[-1].replace(season_index, '', 1).lstrip('0').strip('s')
+			Log(ep_index)
 		else:
-			ep_index	= ep_url.split('-')[-1].strip('s')
-		ep_airdate	= ep.xpath('.//p[@class="aired_available"]/text()')[1]
-		ep_date 	= Datetime.ParseDate(ep_airdate).date()
+			ep_index = ep_url.split('-')[-1].strip('s')
+		ep_airdate = ep.xpath('.//p[@class="aired_available"]/text()')[0].strip()
+		Log(ep_airdate)
+		ep_date = Datetime.ParseDate(ep_airdate).date()
+		Log(ep_date)
 		
 		if season_index:
-			oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, duration=ep_duration, index=int(ep_index), season=int(season_index),
+			oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, index=int(ep_index), season=int(season_index),
 				originally_available_at=ep_date, thumb=Resource.ContentsOfURLWithFallback(url=ep_thumb)))
 		else:
-			oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, duration=ep_duration, absolute_index=int(ep_index),
+			oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, absolute_index=int(ep_index),
 				originally_available_at=ep_date, thumb=Resource.ContentsOfURLWithFallback(url=ep_thumb)))
 	
 	try:
