@@ -88,26 +88,25 @@ def EpisodeBrowser(show_title, season_url, season_title=None):
 	for ep in data.xpath('//div[contains(@class, "episode_guide")]'):
 		try:
 			ep_url = ep.xpath('.//a[@class="title"]')[0].get('href')
-			Log(ep_url)
 		except:
+			continue
+		episode_type = ep.xpath('.//div[@class="full"]//span[@class="title"]')[0].text
+		Log(episode_type)
+		if episode_type == "episode highlights":
+			#highlight reels don't work with the URL Service for some reason and who wants to watch
+			#episode highlights anyway. Exclude that sh!t from the episode list.
 			continue
 
 		ep_title = ep.xpath('.//img')[0].get('title')
-		Log(ep_title)
 		ep_thumb = ep.xpath('.//img')[0].get('src').split('?')[0]
-		Log(ep_thumb)
 		ep_summary = ep.xpath('.//div[@class="description"]//p')[0].text.strip()
-		Log(ep_summary)
 
 		if season_index:
 			ep_index = ep_url.split('-')[-1].replace(season_index, '', 1).lstrip('0').strip('s')
-			Log(ep_index)
 		else:
 			ep_index = ep_url.split('-')[-1].strip('s')
 		ep_airdate = ep.xpath('.//p[@class="aired_available"]/text()')[0].strip()
-		Log(ep_airdate)
 		ep_date = Datetime.ParseDate(ep_airdate).date()
-		Log(ep_date)
 		
 		if season_index:
 			oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, index=int(ep_index), season=int(season_index),
