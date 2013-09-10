@@ -22,26 +22,6 @@ def MainMenu():
     return oc
 
 ####################################################################################################
-@route("/video/spike/epsorclipsold")
-def EpsOrClipsOld(show_title, show_link):
-
-    oc = ObjectContainer(title2=show_title)
-    data = HTML.ElementFromURL(BASE_URL + show_link)
-
-    for link in data.xpath('//div[@class="menu"]//li/a'):
-        if link.text == "Full Episodes" or link.text == "Episodes":
-            oc.add(DirectoryObject(key=Callback(ShowBrowser, url=link.get('href'), show_title=show_title), title="Full Episodes"))
-        elif link.text == "Video Clips" or link.text == "Videos":
-            oc.add(DirectoryObject(key=Callback(ClipBrowser, show_url=link.get('href'), show_title=show_title), title="Video Clips"))
-        else:
-            pass
-
-    if len(oc) < 1:
-        return ObjectContainer(header="Empty", message="No content found.")
-
-    return oc
-
-####################################################################################################
 @route("/video/spike/epsorclipsshow")
 def EpsOrClipsShow(title, url, show_type):
 
@@ -50,8 +30,6 @@ def EpsOrClipsShow(title, url, show_type):
 
     for show in data.xpath('//div[@class="middle"]/ul/li/a'):
         show_title = show.text
-        Log('the value of show_title is %s' %show_title)
-        #show_title = show.xpath('.//text()')
         show_link = show.get('href')
         if '/events/' in show_link or '/shows/e3' in show_link or not show_title:
             continue
@@ -63,7 +41,7 @@ def EpsOrClipsShow(title, url, show_type):
             else:
                 oc.add(DirectoryObject(key=Callback(ClipBrowser, show_url=show_link, show_title=show_title), title=show_title))
 
-    #oc.objects.sort(key = lambda obj: obj.title)
+    oc.objects.sort(key = lambda obj: obj.title)
 
     if len(oc) < 1:
         return ObjectContainer(header="Empty", message="No content found.")
