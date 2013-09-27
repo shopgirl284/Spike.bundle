@@ -4,7 +4,6 @@ RE_SEASON = Regex('Season ([0-9]+)')
 BASE_URL = "http://www.spike.com"
 MRSS_PATH = "http://www.comedycentral.com/feeds/mrss?uri=%s"
 MRSS_NS = {"media": "http://search.yahoo.com/mrss/"}
-
 ####################################################################################################
 def Start():
 
@@ -101,6 +100,9 @@ def EpisodeBrowser(show_title, season_url, season_title=None):
             ep_index = ep_url.split('-')[-1].replace(season_index, '', 1).lstrip('0').strip('s')
         else:
             ep_index = ep_url.split('-')[-1].strip('s')
+        # found that one ep_index was giving an error due to being empty so added exception
+        if not ep_index:
+            ep_index=0
         ep_airdate = ep.xpath('.//p[@class="aired_available"]/text()')[0].strip()
         ep_date = Datetime.ParseDate(ep_airdate).date()
 		
@@ -152,9 +154,16 @@ def ClipBrowser(show_url, show_title):
             thumb=Resource.ContentsOfURLWithFallback(url=clip_thumb)))
 
     try:
-        next_page = data.xpath('//div[@class="pagination"]//a')[-1]
-        if next_page.text == 'Next':
-            next_url = next_page.get('href')
+        # the paging for the feeds for the videos do not always have the full and proper url in the paging, so this works instead
+        if '/feeds/' in show_url:
+            feed_page = show_url.split('?')[0]
+        else:
+            feed_page = data.xpath('//div[@class="v_content"]//@data-url')[0]
+        all_pages = data.xpath('//div[@class="pagination"]/div/ul/li/a//text()')
+        next_page = int(data.xpath('//div[@class="pagination"]/div/ul/li/span//text()')[0]) + 1
+        next_page = str(next_page)
+        if next_page in all_pages:
+            next_url = feed_page + '?page=' + next_page
             oc.add(NextPageObject(key=Callback(ClipBrowser, show_url=next_url, show_title=show_title), title="Next Page"))
     except:
         pass
