@@ -1,5 +1,6 @@
 RE_TITLE = Regex('(.+?) \([0-9]+\)')
 RE_SEASON = Regex('Season ([0-9]+)')
+RE_EPISODE = Regex('-ep-(\d{3})')
 
 BASE_URL = "http://www.spike.com"
 SHOW_URL = 'http://www.spike.com/shows'
@@ -8,8 +9,8 @@ SHOW_URL = 'http://www.spike.com/shows'
 # Bellator Vote for the Fight('/shows/bellator-vote-for-the-fight') doesn't have a video page
 SHOW_EXCLUSIONS = ["10 Million Dollar Bigfoot Bounty", "All Access: E3", "Bellator MMA: Vote For The Fight"]
 
-# The variables below are no longer used. The can provide detailed info for individual videos or playlists
-#MRSS_PATH = "http://www.comedycentral.com/feeds/mrss?uri=%s"
+# The variables below are no longer used. They provide detailed info for individual videos or playlists
+#MRSS_PATH = "http://www.spike.com/feeds/mrss?uri=%s"
 #MRSS_NS = {"media": "http://search.yahoo.com/mrss/"}
 ####################################################################################################
 def Start():
@@ -29,6 +30,9 @@ def MainMenu():
     for shows in data.xpath('//div[@class="middle"]/div/ul/li/a'):
         url = shows.get('href')
         show_title = shows.text.strip()
+        # Found a few do not have the slash in the front of the url ex. shows/rampage4real
+        if not url.startswith('/'):
+            url = '/' + url
         if not url.startswith('http:'):
             url = BASE_URL + url
         # If '/shows/' is not in url, they will not work with the proceeding functions, so we send them to a special function
@@ -65,7 +69,9 @@ def Sections(title, url):
     # the feed url for full episodes are pulled in the season function 
     for sections in html.xpath('//div[@class="menu"]/ul/li/a'):
         sec_title = sections.xpath('.//text()')[0]
-        if sec_title=='Episode Guide' or sec_title=='Episodes':
+        # If full episodes then it will have an episodes section
+        # Also added code to prevent Android clients from accessing full episodes
+        if sec_title=='Episodes' and Client.Platform not in ('Android'):
             full_url = sections.xpath('.//@href')[0]
             oc.add(DirectoryObject(key=Callback(ShowBrowser, show_url=full_url, show_title="Full Episodes"), title="Full Episodes"))
         # Prior to excluding shows without video pages, one of those shows that did not have a video section did not give a 404 error in this function, 
@@ -123,7 +129,7 @@ def EpisodeBrowser(show_title, season_url, season_title=None):
         except:
             continue
         episode_type = ep.xpath('.//div[@class="full"]//span[@class="title"]')[0].text
-        Log(episode_type)
+        #Log(episode_type)
         if episode_type == "episode highlights":
             #highlight reels don't work with the URL Service for some reason and who wants to watch
             #episode highlights anyway. Exclude that sh!t from the episode list.
@@ -133,21 +139,16 @@ def EpisodeBrowser(show_title, season_url, season_title=None):
         ep_thumb = ep.xpath('.//img')[0].get('src').split('?')[0]
         ep_summary = ep.xpath('.//div[@class="description"]//p')[0].text.strip()
 
-        if season_index:
-            ep_index = ep_url.split('-')[-1].replace(season_index, '', 1).lstrip('0').strip('s')
-        else:
-            ep_index = ep_url.split('-')[-1].strip('s')
-        # found that one ep_index was giving an error due to being empty so added exception
-        if not ep_index:
-            ep_index=0
+        try: ep_index = int(RE_EPISODE.search(ep_url).group(1))
+        except:  ep_index = 0
         ep_airdate = ep.xpath('.//p[@class="aired_available"]/text()')[0].strip()
         ep_date = Datetime.ParseDate(ep_airdate).date()
 		
         if season_index:
-            oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, index=int(ep_index), season=int(season_index),
+            oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, index=ep_index, season=int(season_index),
                 originally_available_at=ep_date, thumb=Resource.ContentsOfURLWithFallback(url=ep_thumb)))
         else:
-            oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, absolute_index=int(ep_index),
+            oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, index=ep_index,
                 originally_available_at=ep_date, thumb=Resource.ContentsOfURLWithFallback(url=ep_thumb)))
 	
     try:
@@ -223,20 +224,30 @@ def SpecialBrowser(show_url, show_title):
     
     for item in data.xpath('//div[@class="item"]/a'):
         item_url = item.xpath('.//@href')[0]
+        item_title = item.xpath('./img//@title')[0]
         if not item_url.startswith('http:'):
             item_url = BASE_URL + item_url
         if '/episodes/' in item_url:
-            item_title = item.xpath('./img//@title')[0]
             oc.add(VideoClipObject(title=item_title, url=item_url, thumb=Resource.ContentsOfURLWithFallback(url=thumb)))
-        if '/video-clips/' in item_url:
-            html = HTML.ElementFromURL(item_url)
-            clip_feed_url = html.xpath('//div[@class="v_content"]//@data-url')[0]
-            if clip_feed_url not in clip_feeds:
-                clip_feeds.append(clip_feed_url)
-                oc.add(DirectoryObject(key=Callback(ClipBrowser, show_url=clip_feed_url, show_title=item_title), title="Related Video Clips", thumb=Resource.ContentsOfURLWithFallback(url=thumb)))
-
+        # Video clips have a feed url associated with them that will access all related videos for that special section
+        # So we pull the first one to get that Other Videos section
+        elif '/video-clips/' in item_url:
+            if not clip_feeds:
+                try:
+                    html = HTML.ElementFromURL(item_url)
+                    clip_feed_url = html.xpath('//div[@class="v_content"]//@data-url')[0]
+                    if clip_feed_url not in clip_feeds:
+                        clip_feeds.append(clip_feed_url)
+                        oc.add(DirectoryObject(key=Callback(ClipBrowser, show_url=clip_feed_url, show_title="Related Video Clips"), title="Related Video Clips", thumb=Resource.ContentsOfURLWithFallback(url=thumb)))
+                except:
+                    oc.add(VideoClipObject(title=item_title, url=item_url, thumb=Resource.ContentsOfURLWithFallback(url=thumb)))
+            else:
+                oc.add(VideoClipObject(title=item_title, url=item_url, thumb=Resource.ContentsOfURLWithFallback(url=thumb)))
+        # There are also video collection urls but since they are already in other list there is no point including them
+        # Not sure if this is worth including since most if not all are already listed on the page
+        else:
+            continue
     if len(oc) == 1:
         return ObjectContainer(header="Spike", message="There are no compatible videos available for %s." %show_title)
 
     return oc
-
