@@ -10,8 +10,8 @@ SHOW_URL = 'http://www.spike.com/shows'
 SHOW_EXCLUSIONS = ["10 Million Dollar Bigfoot Bounty", "All Access: E3", "Bellator MMA: Vote For The Fight"]
 
 # The variables below are no longer used. They provide detailed info for individual videos or playlists
-MRSS_PATH = "http://www.spike.com/feeds/mrss?uri=%s"
-MRSS_NS = {"media": "http://search.yahoo.com/mrss/"}
+#MRSS_PATH = "http://www.spike.com/feeds/mrss?uri=%s"
+#MRSS_NS = {"media": "http://search.yahoo.com/mrss/"}
 ####################################################################################################
 def Start():
 
@@ -69,9 +69,9 @@ def Sections(title, url):
     # the feed url for full episodes are pulled in the season function 
     for sections in html.xpath('//div[@class="menu"]/ul/li/a'):
         sec_title = sections.xpath('.//text()')[0]
-        # AT LEAST SOME HAVE AN EPISODE GUIDE AND AN EPISODE SECTION. NEED TO ONLY USE ONE
-        #if sec_title=='Episode Guide' or sec_title=='Episodes':
-        if sec_title=='Episodes':
+        # If full episodes then it will have an episodes section
+        # Also added code to prevent Android clients from accessing full episodes
+        if sec_title=='Episodes' and Client.Platform not in ('Android'):
             full_url = sections.xpath('.//@href')[0]
             oc.add(DirectoryObject(key=Callback(ShowBrowser, show_url=full_url, show_title="Full Episodes"), title="Full Episodes"))
         # Prior to excluding shows without video pages, one of those shows that did not have a video section did not give a 404 error in this function, 
@@ -145,10 +145,10 @@ def EpisodeBrowser(show_title, season_url, season_title=None):
         ep_date = Datetime.ParseDate(ep_airdate).date()
 		
         if season_index:
-            oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, index=int(ep_index), season=int(season_index),
+            oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, index=ep_index, season=int(season_index),
                 originally_available_at=ep_date, thumb=Resource.ContentsOfURLWithFallback(url=ep_thumb)))
         else:
-            oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, index=int(ep_index),
+            oc.add(EpisodeObject(url=ep_url, title=ep_title, show=show_title, summary=ep_summary, index=ep_index,
                 originally_available_at=ep_date, thumb=Resource.ContentsOfURLWithFallback(url=ep_thumb)))
 	
     try:
@@ -251,26 +251,3 @@ def SpecialBrowser(show_url, show_title):
         return ObjectContainer(header="Spike", message="There are no compatible videos available for %s." %show_title)
 
     return oc
-####################################################################################################
-# This function breaks down videoplaylists into clips from a mgid
-# THIS FUNCTION IS NOT CURRENTLY USED
-@route("/video/spike/mrssfeed")
-def MRSSfeed(mgid, title):
-
-    oc = ObjectContainer(title2=title)
-
-    mrss_url = MRSS_PATH %mgid
-
-    data = XML.ElementFromURL(mrss_url)
-
-    for item in data.xpath('//item'):
-        item_title = item.xpath('.//title//text()')[0]
-        item_url = item.xpath('.//link//text()')[0]
-        item_thumb = item.xpath('.//media:thumbnail/@url', namespaces=MRSS_NS)[0]
-        oc.add(VideoClipObject(title=item_title, url=item_url, thumb=Resource.ContentsOfURLWithFallback(url=item_thumb)))
-
-    if len(oc) == 1:
-        return ObjectContainer(header="Spike", message="There are no compatible videos available")
-
-    return oc
-
