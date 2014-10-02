@@ -21,6 +21,32 @@ def Start():
 def MainMenu():
 
     oc = ObjectContainer()
+    oc.add(DirectoryObject(key=Callback(Primetime, title='Primetime and Originals'), title='Primetime and Originals')) 
+    oc.add(DirectoryObject(key=Callback(AllMenu, title="All Shows"), title="All Shows"))
+    
+    return oc
+
+####################################################################################################
+@route("/video/spike/primetime")
+def Primetime(title):
+
+    oc = ObjectContainer(title2=title)
+    data = HTML.ElementFromURL(SHOW_URL)
+
+    for shows in data.xpath('//*[@class="series"]/parent::li/preceding-sibling::li/a'):
+        url = shows.get('href')
+        show_title = shows.text
+        if not url.startswith('http:'):
+            url = BASE_URL + url
+        oc.add(DirectoryObject(key=Callback(Sections, url=url, title=show_title), title=show_title))
+    
+    return oc
+
+####################################################################################################
+@route("/video/spike/allmenu")
+def AllMenu(title):
+
+    oc = ObjectContainer(title2=title)
     data = HTML.ElementFromURL(SHOW_URL)
 
     #Shows are pulled from the main show page and this pulls shows from all four sectionslisted
