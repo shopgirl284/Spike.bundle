@@ -21,8 +21,6 @@ def Start():
 def MainMenu():
 
     oc = ObjectContainer()
-    data = HTML.ElementFromURL(SHOW_URL)
-
     oc.add(DirectoryObject(key=Callback(Primetime, title='Primetime and Originals'), title='Primetime and Originals')) 
     oc.add(DirectoryObject(key=Callback(AllMenu, title="All Shows"), title="All Shows"))
     
