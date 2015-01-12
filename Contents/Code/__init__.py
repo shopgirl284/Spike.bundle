@@ -1,7 +1,7 @@
 RE_SEASON = Regex('Season ([0-9]+)')
 RE_EPISODE = Regex('-ep-(\d{3})')
 
-BASE_URL = "http://www.spike.com"
+BASE_URL = 'http://www.spike.com'
 SHOW_URL = 'http://www.spike.com/shows'
 
 # 10 Million Dollar Bigfoot Bounty('/shows/bigfoot-bounty') shows no videos because it is a blog
@@ -12,9 +12,9 @@ SHOW_EXCLUSIONS = ["10 Million Dollar Bigfoot Bounty", "All Access: E3", "Bellat
 ####################################################################################################
 def Start():
 
-    ObjectContainer.title1 = "Spike"
+    ObjectContainer.title1 = 'Spike'
     HTTP.CacheTime = CACHE_1HOUR
-    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.7; rv:13.0) Gecko/20100101 Firefox/13.0.1'
+    HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'
 
 ####################################################################################################
 @handler("/video/spike", "Spike")
@@ -23,7 +23,7 @@ def MainMenu():
     oc = ObjectContainer()
     oc.add(DirectoryObject(key=Callback(Primetime, title='Primetime and Originals'), title='Primetime and Originals')) 
     oc.add(DirectoryObject(key=Callback(AllMenu, title="All Shows"), title="All Shows"))
-    
+
     return oc
 
 ####################################################################################################
@@ -34,12 +34,15 @@ def Primetime(title):
     data = HTML.ElementFromURL(SHOW_URL)
 
     for shows in data.xpath('//*[@class="series"]/parent::li/preceding-sibling::li/a'):
+
         url = shows.get('href')
         show_title = shows.text
+
         if not url.startswith('http:'):
             url = BASE_URL + url
+
         oc.add(DirectoryObject(key=Callback(Sections, url=url, title=show_title), title=show_title))
-    
+
     return oc
 
 ####################################################################################################
@@ -91,17 +94,21 @@ def Sections(title, url):
     # Then we see if there is an episode guide or episode section and get the feed url for video clips 
     # the feed url for full episodes are pulled in the season function 
     for sections in html.xpath('//div[@class="menu"]/ul/li/a'):
+
         sec_title = sections.xpath('.//text()')[0]
+
         # If full episodes then it will have an episodes section
         # Also added code to prevent Android clients from accessing full episodes
         if sec_title=='Episodes' and Client.Platform not in ('Android'):
             full_url = sections.xpath('./@href')[0]
             oc.add(DirectoryObject(key=Callback(ShowBrowser, show_url=full_url, show_title="Full Episodes"), title="Full Episodes"))
+
         # Prior to excluding shows without video pages, one of those shows that did not have a video section did not give a 404 error in this function, 
         # so put this pull of video clip feed in an elif to help prevent any issues for shows added in the future 
         elif sec_title=='Video Clips' or sec_title=='Videos':
             clip_feed_url = html.xpath('//div[@class="v_content"]/@data-url')[0]
             oc.add(DirectoryObject(key=Callback(ClipBrowser, show_url=clip_feed_url, show_title="Video Clips"), title="Video Clips"))
+
         else:
             continue
 
@@ -149,19 +156,20 @@ def EpisodeBrowser(show_title, season_url, season_title=None):
 
     for ep in data.xpath('//div[contains(@class, "episode_guide")]'):
         try:
-            ep_url = ep.xpath('.//a[@class="title"]')[0].get('href')
+            ep_url = ep.xpath('.//a[@class="title"]/@href')[0]
         except:
             continue
-        episode_type = ep.xpath('.//div[@class="full"]//span[@class="title"]')[0].text
-        #Log(episode_type)
-        if episode_type == "episode highlights":
+
+        episode_type = ep.xpath('.//div[@class="full"]//span[@class="title"]/text()')
+
+        if len(episode_type) < 1 or episode_type[0].lower() != "full episode":
             #highlight reels don't work with the URL Service for some reason and who wants to watch
             #episode highlights anyway. Exclude that sh!t from the episode list.
             continue
 
-        ep_title = ep.xpath('.//img')[0].get('title')
-        ep_thumb = ep.xpath('.//img')[0].get('src').split('?')[0]
-        ep_summary = ep.xpath('.//div[@class="description"]//p')[0].text.strip()
+        ep_title = ep.xpath('.//img/@title')[0]
+        ep_thumb = ep.xpath('.//img/@src')[0].split('?')[0]
+        ep_summary = ep.xpath('.//div[@class="description"]//p/text()')[0].strip()
 
         try: ep_index = int(RE_EPISODE.search(ep_url).group(1))
         except:  ep_index = 0
@@ -177,14 +185,15 @@ def EpisodeBrowser(show_title, season_url, season_title=None):
 
     try:
         next_page = data.xpath('//div[@class="pagination"]//a')[-1]
-        if next_page.text == 'Next':
+
+        if next_page.text.lower() == 'next':
             next_url = next_page.get('href')
-            oc.add(NextPageObject(key=Callback(EpisodeBrowser, show_title=show_title, season_url=next_url, season_title=season_title), title="Next Page"))
+            oc.extend(EpisodeBrowser(show_title=show_title, season_url=next_url, season_title=season_title))
     except:
         pass
 
     if len(oc) < 1:
-        return ObjectContainer(header="Spike", message="There are currently no episodes available for %s." %show_title)
+        return ObjectContainer(header="Spike", message="There are currently no episodes available for %s." % (show_title))
 
     return oc
 
@@ -200,17 +209,17 @@ def ClipBrowser(show_url, show_title):
     data = HTML.ElementFromURL(show_url)
 
     for clip in data.xpath('//div[@id="show_clips_res"]//div[@class="block"]'):
-        clip_url = clip.xpath('.//a')[0].get('href')
-        clip_thumb = clip.xpath('.//img')[0].get('src').split('?')[0]
-        clip_title = clip.xpath('.//h3/a')[0].text
-        clip_runtime = clip.xpath('.//h3/small')[0].text.strip('(').strip(')')
+        clip_url = clip.xpath('.//a/@href')[0]
+        clip_thumb = clip.xpath('.//img/@src')[0].split('?')[0]
+        clip_title = clip.xpath('.//h3/a/text()')[0]
+        clip_runtime = clip.xpath('.//h3/small/text()')[0].strip('(').strip(')')
         clip_duration = Datetime.MillisecondsFromString(clip_runtime)
         try:
-            posted_date = clip.xpath('.//div[@class="af_content"]/small')[0].text.strip('Posted ')
+            posted_date = clip.xpath('.//div[@class="af_content"]/small/text()')[0].strip('Posted ')
             clip_date = Datetime.ParseDate(posted_date).date()
         except:
             clip_date = None
-        clip_summary = clip.xpath('.//div[@class="af_content"]/p')[0].text
+        clip_summary = clip.xpath('.//div[@class="af_content"]/p/text()')[0]
 
         oc.add(VideoClipObject(url=clip_url, title=clip_title, summary=clip_summary, duration=clip_duration, originally_available_at=clip_date,
             thumb=Resource.ContentsOfURLWithFallback(url=clip_thumb)))
