@@ -2,7 +2,6 @@ BASE_URL = 'http://www.spike.com'
 SHOW_URL = 'http://www.spike.com/shows'
 
 RE_JSON = Regex('var triforceManifestFeed = (.+?)};', Regex.DOTALL)
-JSON_MENU = 'http://www.spike.com/modules/ent_m066_spike/3.1.1/85ba7bc8-b78f-4158-89f1-84636b555f64'
 
 # All Access E3('/shows/32') shows no videos because it has not been updated to the new format
 SHOW_EXCLUSIONS = ["All Access: E3"]
@@ -32,7 +31,9 @@ def ShowList(title, list_type=0):
 
     oc = ObjectContainer(title2 = title)
 
-    try: json = JSON.ObjectFromURL(JSON_MENU) 
+    # This gets the header feed from the home page to build menus, to prevent errors from it changing
+    menu_feed = JSONFeed(BASE_URL, 'header')
+    try: json = JSON.ObjectFromURL(menu_feed) 
     except: json = None
 
     if json: 
@@ -297,7 +298,7 @@ def JSONVideoBrowser(url, title):
 
 ####################################################################################################
 # This function decides whether a special has video pages
-# Special pages do not have json for menus on main page, so using html to pull the sections is the best
+# Special pages do not have json for the main page, so using html to pull the URLs is the best
 @route("/video/spike/specialsections")
 def SpecialSections(title, url):
 
@@ -308,9 +309,16 @@ def SpecialSections(title, url):
     except:
         return ObjectContainer(header="Spike", message="This show does not contain videos.")
 
-    for sections in html.xpath('//div[@id="nav"]/ul/li/a'):
+    # We search the main carousel and the navigation bar to find any links for 
+    # episodes or videos and use the combined item list to produce options
+    banner_list = html.xpath('//div[@class="carousel_content"]/ul/li/a')
+    nav_list = html.xpath('//div[@id="nav"]/ul/li/a')
+    sections_list = banner_list + nav_list
+    for sections in sections_list:
 
-        sec_title = sections.xpath('.//text()')[0]
+        # Check for carousel title first, then try nav title
+        try: sec_title = sections.xpath('.//h4/text()')[0]
+        except: sec_title = sections.xpath('.//text()')[0]
         sec_url = sections.xpath('./@href')[0]
 
         if not sec_url.startswith('http:'):
@@ -328,7 +336,7 @@ def SpecialSections(title, url):
             continue
 
     if len(oc) < 1:
-        return ObjectContainer(header="Spike", message="There are no videos available.")
+        return ObjectContainer(header="Spike", message="There are currently no videos available.")
     else:
         return oc
 
