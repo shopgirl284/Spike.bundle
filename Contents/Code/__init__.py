@@ -1,11 +1,12 @@
+PREFIX = '/video/spike'
+TITLE = 'Spike'
 BASE_URL = 'http://www.spike.com'
-SHOW_URL = 'http://www.spike.com/shows'
 
-RE_JSON = Regex('var triforceManifestFeed = (.+?)};', Regex.DOTALL)
+# Pull the json from the HTML content to prevent any issues with redirects and/or bad urls
+RE_MANIFEST = Regex('var triforceManifestFeed = (.+?);', Regex.DOTALL)
 
-# All Access E3('/shows/32') shows no videos because it has not been updated to the new format
-SHOW_EXCLUSIONS = ["All Access: E3"]
-
+EXCLUSIONS = []
+ENT_LIST = ['ent_m100', 'ent_m069', 'ent_m150', 'ent_m151', 'ent_m112', 'ent_m116']
 ####################################################################################################
 def Start():
 
@@ -14,352 +15,225 @@ def Start():
     HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'
 
 ####################################################################################################
-@handler("/video/spike", "Spike")
+@handler(PREFIX, TITLE)
 def MainMenu():
 
     oc = ObjectContainer()
-    oc.add(DirectoryObject(key=Callback(ShowList, title='Shows', list_type=0), title='Shows')) 
-    oc.add(DirectoryObject(key=Callback(ShowList, title='Full Episodes', list_type=1), title='Full Episodes')) 
-    oc.add(DirectoryObject(key=Callback(AllMenu, title='All Shows'), title='All Shows'))
+    oc.add(DirectoryObject(key = Callback(FeedMenu, title="Full Episodes", url=BASE_URL+'/full-episodes'), title = "Full Episodes"))
+    oc.add(DirectoryObject(key = Callback(FeedMenu, title="Shows", url=BASE_URL+'/shows'), title = "Shows"))
 
     return oc
 
 ####################################################################################################
-# This function produces a list from the menu json of shows or shows with full episodes
-@route("/video/spike/showlist", list_type=int)
-def ShowList(title, list_type=0):
-
-    oc = ObjectContainer(title2 = title)
-
-    # This gets the header feed from the home page to build menus, to prevent errors from it changing
-    menu_feed = JSONFeed(BASE_URL, 'header')
-    try: json = JSON.ObjectFromURL(menu_feed) 
-    except: json = None
-
-    if json: 
-
-        for show in json['result']['siteNavigation'][list_type]['entries']:
-
-            show_url = show['url']
-
-            if not show_url.startswith('http:'):
-                show_url = BASE_URL + show_url
-
-            show_title = show['title']
-
-            # Send shows to sections and full episodes straight to JSONVideoBrowser
-            if list_type == 0:
-                oc.add(DirectoryObject(key=Callback(Sections, url=show_url, title=show_title), title=show_title))
-            else:
-                # To prevent multiple http request when producing full episode shows
-                # send them to JSONVideoBrowser and let the feed be pulled there
-                oc.add(DirectoryObject(key=Callback(JSONVideoBrowser, url=show_url, title=show_title), title=show_title))
-
-    if len(oc) < 1:
-        return ObjectContainer(header="Spike", message="There are no shows to list.")
-    else:
-        return oc
-
-####################################################################################################
-# This function produces a list of all shows from the /shows page
-@route("/video/spike/allmenu")
-def AllMenu(title):
-
+# This function pulls the various json feeds for video sections of a page 
+@route(PREFIX + '/feedmenu')
+def FeedMenu(title, url, thumb=''):
+    
     oc = ObjectContainer(title2=title)
-    data = HTML.ElementFromURL(SHOW_URL)
-
-    # Shows are pulled from the main show page and this pulls shows from all four sections listed
-    for shows in data.xpath('//div[@class="middle"]/div/ul/li/a'):
-
-        show_title = shows.text.strip()
-
-        if show_title in SHOW_EXCLUSIONS:
-            continue
-
-        url = shows.get('href')
-
-        if not url.startswith('http://'):
-            url = '%s/%s' % (BASE_URL, url.lstrip('/'))
-
-        # Send specials to separate function to find videos
-        if '/shows/' in url:
-            oc.add(DirectoryObject(key=Callback(Sections, url=url, title=show_title), title=show_title))
-        else:
-            oc.add(DirectoryObject(key=Callback(SpecialSections, url=url, title=show_title), title=show_title))
-
-    oc.objects.sort(key = lambda obj: obj.title)
-
-    if len(oc) < 1:
-        return ObjectContainer(header="Spike", message="There are no shows to list.")
-    else:
-        return oc
-
-####################################################################################################
-# This function decides whether the show has full episodes and/or video clips
-@route("/video/spike/sections")
-def Sections(title, url):
-
-    oc = ObjectContainer(title2=title)
-
+    feed_title = title
     try:
         content = HTTP.Request(url, cacheTime=CACHE_1DAY).content
-        html = HTML.ElementFromString(content)
+        zone_list = JSON.ObjectFromString(RE_MANIFEST.search(content).group(1))['manifest']['zones']
     except:
-        return ObjectContainer(header="Spike", message="This show does not have a url.")
+        return ObjectContainer(header="Incompatible", message="Unable to find video feeds for %s." % (url))
 
-    try:
-        # A few will not pick up json without looking for '};' at end
-        json_data = RE_JSON.search(content).group(1) + '}'
-        json = JSON.ObjectFromString(json_data)
-    except: json = None
+    if not thumb:
+        try: thumb = HTML.ElementFromString(content).xpath('//meta[@property="og:image"]/@content')[0].strip()
+        except: thumb = ''
 
-    if json:
+    for zone in zone_list:
 
-        show_sections = html.xpath('//div[@id="t4_lc"]/div')
-
-        for sections in show_sections:
-
-            sec_id = sections.xpath('./@id')[0]
-            feed_url = json['manifest']['zones'][sec_id]['feed']
-
-            try: sec_json = JSON.ObjectFromURL(feed_url, cacheTime=CACHE_1DAY) 
-            except: sec_json = None
-
-            if sec_json:
-
-                sec_title = sec_json['result']['promo']['headline']
-
-                # found a few that are empty but do not have a section title
-                if not sec_title:
-                    continue
-
-                # some will create a section even if it is empty
-                try: sec_items = sec_json['result']['items'][0]
-                except: continue
-
-                # Send video clips to be broken into seasons
-                if sec_title=='Video Clips':
-                    oc.add(DirectoryObject(key=Callback(SeasonFilters, url=feed_url, title=sec_title), title=sec_title))
-                else:
-                    oc.add(DirectoryObject(key=Callback(JSONVideoBrowser, url=feed_url, title=sec_title), title=sec_title))
-
-    else:
-        Log('no json')
-        return ObjectContainer(header="Spike", message="There are no compatible videos available.")
-
-    if len(oc) < 1:
-        return ObjectContainer(header="Spike", message="There are no videos available.")
-    else:
-        return oc
-
-####################################################################################################
-# This function splits video clips into seasons
-# There is no point splitting full episodes into seasons because most listed are highlights
-# which are not supported by the URL service
-@route("/video/spike/seasonfilters")
-def SeasonFilters(title, url):
-
-    oc = ObjectContainer(title2 = title)
-
-    try: json = JSON.ObjectFromURL(url, cacheTime=CACHE_1DAY) 
-    except: json= None
-
-    if json: 
-
-        for filter in json['result']['filters']:
-
-            filter_url = filter['url']
-            filter_title = filter['name']
-            oc.add(DirectoryObject(key=Callback(JSONVideoBrowser, url=filter_url, title=filter_title), title=filter_title))
-
-    if len(oc) < 1:
-        return ObjectContainer(header="Spike", message="There are no compatible videos available." )
-    else:
-        return oc
-
-####################################################################################################
-# This function pulls the videos from a json feed
-@route("/video/spike/jsonvideobrowser")
-def JSONVideoBrowser(url, title):
-
-    oc = ObjectContainer(title2 = title)
-
-    # Full episode section would have to do too many http requests 
-    # if we pull the feed url when we pull the show names so we do it here
-    if url.endswith('/full-episodes'): 
-        feed_type = 't4_lc_promo2'
-        url = JSONFeed(url, feed_type)
-
-    try: json = JSON.ObjectFromURL(url) 
-    except: json= None
-
-    if json: 
-
-        try: multi_vids = json['result']['items'][0]
-        except: multi_vids = None
-
-        # This handles json for a single episode json
-        # This is used by specials that have a full show link
-        if not multi_vids:
-
-            # Check to see if json contains any results otherwise send error
-            try: locked = json['result']['episode']['distPolicy']['authTve']
-            except: return ObjectContainer(header="Spike", message="There are currently no videos available.")
-
-            available = json['result']['episode']['distPolicy']['available']
-            duration = json['result']['episode']['duration']
-
-            try: duration = int(duration) * 1000
-            except: duration = 0
-
-            if available and not locked:
-
-                oc.add(VideoClipObject(
-                    url = json['result']['episode']['url'],
-                    title = json['result']['episode']['title'],
-                    duration = duration,
-                    summary = json['result']['episode']['description'],
-                    thumb = Resource.ContentsOfURLWithFallback(url=json['result']['episode']['images'][0]['url'])
-                ))
-
-        # This handles json for a multiple videos
-        else:
-
-            for video in json['result']['items']:
-
-                locked = video['distPolicy']['authTve']
-
-                if locked:
-                    continue
-
-                available = video['distPolicy']['available']
-
-                if not available:
-                    continue
-
-                vid_url = video['url']
-                vid_title = video['title']
-
-                # Found some urls for VGX that have /video-collections/ in the urls 
-                # which will fail the url service check, they all consist of just one clips
-                # so changing them to '/video-clips/' works and does not cause an error
-                if '/video-collections/' in vid_url:
-                    vid_url = vid_url.replace('/video-collections/', '/video-clips/')
-
-                thumb = video['images'][0]['url']
-
-                try: episode = int(video['season']['episodeNumber'])
-                except: episode = None
-
-                try: season = int(video['season']['seasonNumber'])
-                except: season = None
-
-                # Duration for video clips are strings with decimals and full episodes are integers
-                # So make both the same format (string) and then convert video clip duration to milliseconds
-                duration = video['duration']
-
-                try: duration = int(duration) * 1000
-                except:
-                    try: duration = int(float(duration)) * 1000
-                    except: duration = 0
-
-                summary = video['description']
-
-                if episode:
-                    oc.add(EpisodeObject(
-                        url = vid_url,
-                        title = vid_title,
-                        duration = duration,
-                        index = episode,
-                        season = season,
-                        summary = summary,
-                        thumb = Resource.ContentsOfURLWithFallback(url=thumb)
-                    ))
-                else:
-                    oc.add(VideoClipObject(
-                        url = vid_url,
-                        title = vid_title,
-                        duration = duration,
-                        summary = summary,
-                        thumb = Resource.ContentsOfURLWithFallback(url=thumb)
-                    ))
-
-            # Add next page code here
-            try: next_page = json['result']['nextPageURL']
-            except: next_page = None
-
-            if next_page:
-                oc.add(NextPageObject(key=Callback(JSONVideoBrowser, url=next_page, title=title), title="Next Page"))
-
-    if len(oc) < 1:
-        return ObjectContainer(header="Spike", message="There are currently no videos available.")
-    else:
-        return oc
-
-####################################################################################################
-# This function decides whether a special has video pages
-# Special pages do not have json for the main page, so using html to pull the URLs is the best
-@route("/video/spike/specialsections")
-def SpecialSections(title, url):
-
-    oc = ObjectContainer(title2=title)
-
-    try:
-        html = HTML.ElementFromURL(url, cacheTime=CACHE_1DAY)
-    except:
-        return ObjectContainer(header="Spike", message="This show does not contain videos.")
-
-    # We search the main carousel and the navigation bar to find any links for 
-    # episodes or videos and use the combined item list to produce options
-    banner_list = html.xpath('//div[@class="carousel_content"]/ul/li/a')
-    nav_list = html.xpath('//div[@id="nav"]/ul/li/a')
-    sections_list = banner_list + nav_list
-    for sections in sections_list:
-
-        # Check for carousel title first, then try nav title
-        try: sec_title = sections.xpath('.//h4/text()')[0]
-        except: sec_title = sections.xpath('.//text()')[0]
-        sec_url = sections.xpath('./@href')[0]
-
-        if not sec_url.startswith('http:'):
-            sec_url = BASE_URL + sec_url
-
-        if '/video-collections/' in sec_url:
-            oc.add(DirectoryObject(key=Callback(Sections, url=sec_url, title=sec_title), title=sec_title))
-
-        elif '/episodes/' in sec_url:
-            feed_type = 't2_lc_promo1'
-            feed_url = JSONFeed(sec_url, feed_type)
-            oc.add(DirectoryObject(key=Callback(JSONVideoBrowser, url=feed_url, title=sec_title), title=sec_title))
-
-        else:
+        if zone in ('header', 'footer', 'ads-reporting', 'ENT_M171'):
             continue
 
+        json_feed = zone_list[zone]['feed']
+
+        # Split feed to get ent code
+        try: ent_code = json_feed.split('/feeds/')[1].split('/')[0]
+        except:  ent_code = ''
+
+        #Log('the value of ent_code is %s' %ent_code)
+        ent_code = ent_code.split('_spike')[0]
+
+        if ent_code not in ENT_LIST:
+            continue
+
+        json = JSON.ObjectFromURL(json_feed, cacheTime = CACHE_1DAY)
+
+        try: title = json['result']['promo']['headline'].title()
+        except: 
+            # Using ent_m069 code for All shows and those shows are in a data item
+            try: title = json['result']['data']['header']['title'].title()
+            except: title = feed_title
+        # Create menu for the ent_m151 - full episodes to produce videos and menu items for full episode feeds by show
+        if ent_code=='ent_m151':
+            oc.add(DirectoryObject(key=Callback(ShowVideos, title=title, url=json_feed),
+                title=title,
+                thumb=Resource.ContentsOfURLWithFallback(url=thumb)
+            ))
+            for item in json['result']['shows']:
+                oc.add(DirectoryObject(key=Callback(ShowVideos, title=item['title'], url=item['url']),
+                    title=item['title']
+                ))
+        # Create menu for each show's full episodes - ent_m112
+        elif ent_code == 'ent_m112':
+
+            oc.add(DirectoryObject(
+                key = Callback(ShowVideos, title=title, url=json_feed),
+                title = title,
+                thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+            ))
+
+        # Create menu items for those that need to go to Produce Sections
+        # ent_m100-featured show and ent_m150-all shows and ent_m112 - video clips by season
+        # ent_m100 and ent_m150 are result type shows and ent_m116 result type filters
+        else:
+            if ent_code == 'ent_m116':
+                result_type = 'filters'
+            else:
+                result_type = 'shows'
+            oc.add(DirectoryObject(key=Callback(ProduceSection, title=title, url=json_feed, result_type=result_type),
+                title=title,
+                thumb=Resource.ContentsOfURLWithFallback(url=thumb)
+            ))
+            
     if len(oc) < 1:
-        return ObjectContainer(header="Spike", message="There are currently no videos available.")
+        return ObjectContainer(header="Empty", message="There are no results to list.")
     else:
         return oc
+#####################################################################################
+# For Producing the sections from various json feeds
+# This function can produce show lists, AtoZ show lists, and video filter lists
+# Even though Spike uses ent_069 for all shows, we are keeping the alpha code since it may be added later
+@route(PREFIX + '/producesections')
+def ProduceSection(title, url, result_type, thumb='', alpha=''):
+    
+    oc = ObjectContainer(title2=title)
+    (section_title, feed_url) = (title, url)
+    json = JSON.ObjectFromURL(url)
 
-####################################################################################################
-# This function pulls the json feed for videos
-@route("/video/spike/jsonfeed")
-def JSONFeed(url, feed_type=''):
+    # Using ent_mo69 for all shows right now and they are listed as data items
+    if '/feeds/ent_m069' in feed_url:
+        item_list = json['result']['data']['items']
+    else:
+        item_list = json['result'][result_type]
+    #item_list = json['result'][result_type]
+    # Create item list for individual sections of alphabet for the All listings
+    if '/feeds/ent_m150' in feed_url and alpha:
+        item_list = json['result'][result_type][alpha]
+    for item in item_list:
+        # Create a list of show sections
+        if result_type=='shows':
+            if '/feeds/ent_m150' in feed_url and not alpha:
+                oc.add(DirectoryObject(
+                    key=Callback(ProduceSection, title=item, url=feed_url, result_type=result_type, alpha=item),
+                    title=item.replace('hash', '#').title()
+                ))
+            else:
+                if item['title'] in EXCLUSIONS:
+                    continue
+                try: url = item['url']
+                except: url = item['canonicalURL']
+                # Skip bad show urls that do not include '/shows/' or events. If '/events/' there is no manifest.
+                if '/shows/' not in url:
+                    continue
+                try: thumb = item['images'][0]['url']
+                except: 
+                    item['image'][0]['url']
+                    thumb = thumb
+                oc.add(DirectoryObject(
+                    key=Callback(FeedMenu, title=item['title'], url=url, thumb=thumb),
+                    title=item['title'],
+                    thumb = Resource.ContentsOfURLWithFallback(url=thumb)
+                ))
 
-    content = HTTP.Request(url, cacheTime=CACHE_1DAY).content
-    # This makes sure the right zone or section is pulled based on the type of page 
-    if feed_type: 
-        promo = feed_type
-    else: 
-        promo = 't4_lc_promo1'
+        # Create season sections for filters
+        else:
+            # Skip any empty sections
+            count=item['count']
+            if  count==0:
+                continue
+            oc.add(DirectoryObject(
+                key=Callback(ShowVideos, title=item['name'], url=item['url']),
+                title=item['name'],
+                thumb=Resource.ContentsOfURLWithFallback(url=thumb)
+            ))
+    
+    if len(oc) < 1:
+        Log ('still no value for objects')
+        return ObjectContainer(header="Empty", message="There are no results to list right now.")
+    else:
+        return oc
+#######################################################################################
+# This function produces the videos listed in json feed under items
+@route(PREFIX + '/showvideos')
+def ShowVideos(title, url):
 
-    try:
-        # A few will not pick up json without looking for '};' at end
-        json_data = RE_JSON.search(content).group(1) + '}'
-        json = JSON.ObjectFromString(json_data)
-        try: video_feed = json['manifest']['zones'][promo]['feed']
-        except: video_feed = url
-    except: 
-        Log('cannot find a json feed')
-        video_feed = url
+    oc = ObjectContainer(title2=title)
+    json = JSON.ObjectFromURL(url)
+    #try: videos = json['result']['items']
+    #except: return ObjectContainer(header="Empty", message="There are no videos to list right now.")
+    try: videos = json['result']['items']
+    except:
+        try: videos = json['result']['data']['items']
+        except: return ObjectContainer(header="Empty", message="There are no videos to list right now.")
+    
+    for video in videos:
 
-    return video_feed
+        vid_url = video['canonicalURL']
+
+        # catch any bad links that get sent here
+        if not ('/video-clips/') in vid_url and not ('/video-playlists/') in vid_url and not ('/full-episodes/') in vid_url:
+            continue
+        if 'bellator.spike.com' in vid_url:
+            continue
+
+        thumb = video['images'][0]['url']
+
+        show = video['show']['title']
+        try: episode = int(video['season']['episodeNumber'])
+        except: episode = 0
+        try: season = int(video['season']['seasonNumber'])
+        except: season = 0
+        
+        try: unix_date = video['airDate']
+        except:
+            try: unix_date = video['publishDate']
+            except: unix_date = unix_date = video['date']['originalPublishDate']['timestamp']
+        date = Datetime.FromTimestamp(float(unix_date)).strftime('%m/%d/%Y')
+        date = Datetime.ParseDate(date)
+
+        # Durations for clips have decimal points
+        duration = video['duration']
+        if not isinstance(duration, int):
+            duration = int(duration.split('.')[0])
+        duration = duration * 1000
+
+        # Everything else has episode and show info now
+        oc.add(EpisodeObject(
+            url = vid_url, 
+            show = show,
+            season = season,
+            index = episode,
+            title = video['title'], 
+            thumb = Resource.ContentsOfURLWithFallback(url=thumb ),
+            originally_available_at = date,
+            duration = duration,
+            summary = video['description']
+        ))
+
+    try: next_page = json['result']['nextPageURL']
+    except: next_page = None
+
+    if next_page and len(oc) > 0:
+
+        oc.add(NextPageObject(
+            key = Callback(ShowVideos, title=title, url=next_page),
+            title = 'Next Page ...'
+        ))
+
+    if len(oc) < 1:
+        Log ('still no value for objects')
+        return ObjectContainer(header="Empty", message="There are no unlocked videos available to watch.")
+    else:
+        return oc
