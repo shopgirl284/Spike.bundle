@@ -6,6 +6,7 @@ BASE_URL = 'http://www.spike.com'
 RE_MANIFEST = Regex('var triforceManifestFeed = (.+?);', Regex.DOTALL)
 
 EXCLUSIONS = []
+SEARCH ='http://relaunch-search.spike.com/solr/spike/select?q=%s&wt=json&start='
 ENT_LIST = ['ent_m100', 'ent_m069', 'ent_m150', 'ent_m151', 'ent_m112', 'ent_m116']
 ####################################################################################################
 def Start():
@@ -21,6 +22,7 @@ def MainMenu():
     oc = ObjectContainer()
     oc.add(DirectoryObject(key = Callback(FeedMenu, title="Full Episodes", url=BASE_URL+'/full-episodes'), title = "Full Episodes"))
     oc.add(DirectoryObject(key = Callback(FeedMenu, title="Shows", url=BASE_URL+'/shows'), title = "Shows"))
+    oc.add(InputDirectoryObject(key = Callback(SearchSections, title="Search"), title = "Search"))
 
     return oc
 
@@ -52,7 +54,6 @@ def FeedMenu(title, url, thumb=''):
         try: ent_code = json_feed.split('/feeds/')[1].split('/')[0]
         except:  ent_code = ''
 
-        #Log('the value of ent_code is %s' %ent_code)
         ent_code = ent_code.split('_spike')[0]
 
         if ent_code not in ENT_LIST:
@@ -86,7 +87,7 @@ def FeedMenu(title, url, thumb=''):
 
         # Create menu items for those that need to go to Produce Sections
         # ent_m100-featured show and ent_m150-all shows and ent_m112 - video clips by season
-        # ent_m100 and ent_m150 are result type shows and ent_m116 result type filters
+        # ent_m116 result type filters otherwise the result type is shows
         else:
             if ent_code == 'ent_m116':
                 result_type = 'filters'
@@ -104,7 +105,7 @@ def FeedMenu(title, url, thumb=''):
 #####################################################################################
 # For Producing the sections from various json feeds
 # This function can produce show lists, AtoZ show lists, and video filter lists
-# Even though Spike uses ent_069 for all shows, we are keeping the alpha code since it may be added later
+# Even though Spike uses ent_069 for all shows, we are keeping the alpha code if it is added later
 @route(PREFIX + '/producesections')
 def ProduceSection(title, url, result_type, thumb='', alpha=''):
     
@@ -117,7 +118,6 @@ def ProduceSection(title, url, result_type, thumb='', alpha=''):
         item_list = json['result']['data']['items']
     else:
         item_list = json['result'][result_type]
-    #item_list = json['result'][result_type]
     # Create item list for individual sections of alphabet for the All listings
     if '/feeds/ent_m150' in feed_url and alpha:
         item_list = json['result'][result_type][alpha]
@@ -171,8 +171,6 @@ def ShowVideos(title, url):
 
     oc = ObjectContainer(title2=title)
     json = JSON.ObjectFromURL(url)
-    #try: videos = json['result']['items']
-    #except: return ObjectContainer(header="Empty", message="There are no videos to list right now.")
     try: videos = json['result']['items']
     except:
         try: videos = json['result']['data']['items']
@@ -183,7 +181,7 @@ def ShowVideos(title, url):
         vid_url = video['canonicalURL']
 
         # catch any bad links that get sent here
-        if not ('/video-clips/') in vid_url and not ('/video-playlists/') in vid_url and not ('/full-episodes/') in vid_url:
+        if not ('/video-clips/') in vid_url and not ('/video-playlists/') in vid_url and not ('/full-episodes/') in vid_url and not ('/episodes/') in vid_url:
             continue
         if 'bellator.spike.com' in vid_url:
             continue
@@ -235,5 +233,101 @@ def ShowVideos(title, url):
     if len(oc) < 1:
         Log ('still no value for objects')
         return ObjectContainer(header="Empty", message="There are no unlocked videos available to watch.")
+    else:
+        return oc
+####################################################################################################
+@route(PREFIX + '/searchsections')
+def SearchSections(title, query):
+    
+    oc = ObjectContainer(title2=title)
+    json_url = SEARCH % (String.Quote(query, usePlus=False))
+    local_url = json_url + '0&defType=edismax'
+    json = JSON.ObjectFromURL(local_url)
+    search_list = []
+
+    for item in json['response']['docs']:
+
+        if item['bucketName_s'] not in search_list:
+            search_list.append(item['bucketName_s'])
+
+    for item in search_list:
+
+        oc.add(DirectoryObject(
+            key = Callback(Search, title=item, url=json_url, search_type=item),
+            title = item
+        ))
+
+    return oc
+
+####################################################################################################
+@route(PREFIX + '/search', start=int)
+def Search(title, url, start=0, search_type=''):
+
+    oc = ObjectContainer(title2=title)
+    local_url = '%s%s&fq=bucketName_s:%s&defType=edismax' % (url, start, search_type)
+    json = JSON.ObjectFromURL(local_url)
+
+    for item in json['response']['docs']:
+
+        result_type = item['bucketName_s']
+        title = item['title_t']
+        full_title = '%s: %s' % (result_type, title)
+
+        try: item_url = item['url_s']
+        except: continue
+
+        # For Shows
+        if result_type == 'Series':
+
+            oc.add(DirectoryObject(
+                key = Callback(FeedMenu, title=item['title_t'], url=item_url, thumb=item['imageUrl_s']),
+                title = full_title,
+                thumb = Resource.ContentsOfURLWithFallback(url=item['imageUrl_s'])
+            ))
+
+        # For Comedians
+        elif result_type == 'Comedians':
+
+            oc.add(DirectoryObject(
+                key = Callback(FeedMenu, title=item['title_t'], url=item_url, thumb=item['imageUrl_s']),
+                title = full_title,
+                thumb = Resource.ContentsOfURLWithFallback(url=item['imageUrl_s'])
+            ))
+
+        # For Episodes and ShowVideo(video clips)
+        else:
+            try: season = int(item['seasonNumber_s'].split(':')[0])
+            except: season = None
+
+            try: episode = int(item['episodeNumber_s'])
+            except: episode = None
+
+            try: show = item['seriesTitle_t']
+            except: show = None
+
+            try: summary = item['description_t']
+            except: summary = None
+
+            oc.add(EpisodeObject(
+                url = item_url, 
+                show = show, 
+                title = full_title, 
+                thumb = Resource.ContentsOfURLWithFallback(url=item['imageUrl_s']),
+                summary = summary, 
+                season = season, 
+                index = episode, 
+                duration = Datetime.MillisecondsFromString(item['duration_s']), 
+                originally_available_at = Datetime.ParseDate(item['contentDate_dt'])
+            ))
+
+    if json['response']['start']+10 < json['response']['numFound']:
+
+        oc.add(NextPageObject(
+            key = Callback(Search, title='Search', url=url, search_type=search_type, start=start+10),
+            title = 'Next Page ...'
+        ))
+
+    if len(oc) < 1:
+        return ObjectContainer(header="Empty", message="There are no results to list.")
     else:
         return oc
