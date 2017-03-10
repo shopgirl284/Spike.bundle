@@ -1,5 +1,7 @@
 PREFIX = '/video/spike'
 TITLE = 'Spike'
+ART = 'art-default.jpg'
+ICON = 'icon-default.jpg'
 BASE_URL = 'http://www.spike.com'
 
 # Pull the json from the HTML content to prevent any issues with redirects and/or bad urls
@@ -8,6 +10,7 @@ RE_MANIFEST = Regex('var triforceManifestFeed = (.+?);', Regex.DOTALL)
 EXCLUSIONS = []
 SEARCH ='http://relaunch-search.spike.com/solr/spike/select?q=%s&wt=json&start='
 ENT_LIST = ['ent_m100', 'ent_m069', 'ent_m150', 'ent_m151', 'ent_m112', 'ent_m116']
+
 ####################################################################################################
 def Start():
 
@@ -16,7 +19,7 @@ def Start():
     HTTP.Headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'
 
 ####################################################################################################
-@handler(PREFIX, TITLE)
+@handler(PREFIX, TITLE, art=ART, thumb=ICON)
 def MainMenu():
 
     oc = ObjectContainer()
