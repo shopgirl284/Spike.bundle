@@ -31,7 +31,7 @@ def MainMenu():
     return oc
 
 ####################################################################################################
-# This function pulls the various json feeds for video sections of a page 
+# This function pulls the json feeds in the ENT_LIST for any page
 @route(PREFIX + '/feedmenu')
 def FeedMenu(title, url, thumb=''):
     
@@ -65,17 +65,10 @@ def FeedMenu(title, url, thumb=''):
 
         json = JSON.ObjectFromURL(json_feed, cacheTime = CACHE_1DAY)
 
-        try: title = json['result']['promo']['headline'].title()
-        except: 
-            try: title = json['result']['data']['headerText'].title()
-            except: 
-                # ent_m069 used for All shows are in a data/header/title field
-                try:
-                    title = json['result']['data']['header']['title'].title()
-                except:
-                    title = feed_title
-        # Create menu for the ent_m151 - full episodes to produce videos and menu items for full episode feeds by show
+        # Create a menu for the main full episodes feed (ent_m151) for all videos and for each show
         if ent_code=='ent_m151':
+            try: title = json['result']['promo']['headline'].title()
+            except: title = feed_title
             oc.add(DirectoryObject(key=Callback(ShowVideos, title=title, url=json_feed),
                 title=title,
                 thumb=Resource.ContentsOfURLWithFallback(url=thumb)
@@ -84,23 +77,34 @@ def FeedMenu(title, url, thumb=''):
                 oc.add(DirectoryObject(key=Callback(ShowVideos, title=item['title'], url=item['url']),
                     title=item['title']
                 ))
-        # Create menu for each show's full episodes - ent_m112
+        
+        # Create menu for each show's full episodes feed (ent_m112)
         elif ent_code == 'ent_m112':
-
+            try: title = json['result']['promo']['headline'].title()
+            except: title = feed_title
             oc.add(DirectoryObject(
                 key = Callback(ShowVideos, title=title, url=json_feed),
                 title = title,
                 thumb = Resource.ContentsOfURLWithFallback(url=thumb)
             ))
 
-        # Create menu items for those that need to go to Produce Sections
-        # ent_m100-featured show and ent_m150-all shows and ent_m112 - video clips by season
-        # ent_m116 result type filters otherwise the result type is items
+        # Create menu items for other feeds to go to Produce Sections
+        # ent_m100-featured show, ent_m150-shows atoz, ent_m069-all shows and ent_m116 - each show's video clips
         else:
             if ent_code == 'ent_m116':
+                # Video clip feeds for each show (ent_m116) results are under filters and the title is under promo/headline
                 result_type = 'filters'
+                try: title = json['result']['promo']['headline'].title()
+                except: title = feed_title
             else:
+                # All show feed results are under data/items (ent_m100, ent_m150, and ent_m069)
                 result_type = 'items'
+                # The title for most show feeds (ent_m100, ent_m150) are under data/headerText
+                try: title = json['result']['data']['headerText'].title()
+                except:
+                    # The title for Spike all shows (ent_m069) is under data/header/title
+                    try: title = json['result']['data']['header']['title'].title()
+                    except: title = feed_title
             oc.add(DirectoryObject(key=Callback(ProduceSection, title=title, url=json_feed, result_type=result_type),
                 title=title,
                 thumb=Resource.ContentsOfURLWithFallback(url=thumb)
@@ -111,9 +115,8 @@ def FeedMenu(title, url, thumb=''):
     else:
         return oc
 ####################################################################################################
-# For Producing the sections from various json feeds
-# This function can produce show lists, AtoZ show lists, and video filter lists
-# Even though Spike uses ent_069 for all shows, we are keeping the alpha code if it is added later
+# This function produces sections from a json feeds including shows(ent_m100 and ent_m069), AtoZ shows(ent_m150), and video filters(ent_m116)
+# Spike uses ent_069 for all shows, but we are keeping the alpha code in case it is added later
 @route(PREFIX + '/producesection', alpha=int)
 def ProduceSection(title, url, result_type, thumb='', alpha=None):
 
@@ -122,23 +125,27 @@ def ProduceSection(title, url, result_type, thumb='', alpha=None):
     counter=0
     json = JSON.ObjectFromURL(url)
 
-    try: item_list = json['result']['data']['items']
+    # Create list for show feeds (data items)
+    try: 
+        item_list = json['result']['data'][result_type]
     except: 
+        # Create list for video feed filters
         try: item_list = json['result'][result_type]
         except: item_list = []
-
-    # Create item list for individual sections of alphabet for the All listings
+    # Create list for alphabet sections for the AtoZ show feeds
     if '/ent_m150/' in feed_url and alpha:
         item_list = json['result']['data']['items'][alpha]['sortedItems']
     for item in item_list:
-        # Create a list of show sections
+        # Produce menu items for show lists
         if '/ent_m150/' in feed_url or '/ent_m100/' in feed_url or '/ent_m069/' in feed_url:
+            # Produce alphabetic menu items for AtoZ
             if '/ent_m150/' in feed_url and not alpha:
                 oc.add(DirectoryObject(
                     key=Callback(ProduceSection, title=item['letter'], url=feed_url, result_type=result_type, alpha=counter),
                     title=item['letter']
                 ))
                 counter=counter+1
+            # Produce menu items for each show (under Featured, a letter, etc)
             else:
                 try: url = item['canonicalURL']
                 except:
@@ -161,7 +168,7 @@ def ProduceSection(title, url, result_type, thumb='', alpha=None):
                     thumb = Resource.ContentsOfURLWithFallback(url=thumb)
                 ))
 
-        # Create season sections for filters
+        # Produce menu items for video filters for the video clips for an individual a show
         else:
             # Skip any empty sections
             count=item['count']
@@ -179,12 +186,13 @@ def ProduceSection(title, url, result_type, thumb='', alpha=None):
     else:
         return oc
 #######################################################################################
-# This function produces the videos listed in json feed under items
+# This function produces the videos listed in a json feed under items
 @route(PREFIX + '/showvideos')
 def ShowVideos(title, url):
 
     oc = ObjectContainer(title2=title)
     json = JSON.ObjectFromURL(url)
+    # Currently all video results are under result/items but added result/data/items in case the feeds change
     try: videos = json['result']['items']
     except:
         try: videos = json['result']['data']['items']
@@ -250,6 +258,7 @@ def ShowVideos(title, url):
     else:
         return oc
 ####################################################################################################
+# This function produces the types of results (show, video, etc) returned from a search
 @route(PREFIX + '/searchsections')
 def SearchSections(title, query):
     
@@ -266,6 +275,7 @@ def SearchSections(title, query):
 
     return oc
 ####################################################################################################
+# This function produces the results for a search under each search type
 @route(PREFIX + '/search', start=int)
 def Search(title, url, start=0, search_type=''):
 
