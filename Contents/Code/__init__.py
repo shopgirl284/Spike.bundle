@@ -125,8 +125,9 @@ def ProduceSection(title, url, result_type, thumb='', alpha=None):
     counter=0
     json = JSON.ObjectFromURL(url)
 
-    # Create list for show feeds (data items)
+    # Create lists
     try: 
+        # Create list for show feeds (data items)
         item_list = json['result']['data'][result_type]
     except: 
         # Create list for video feed filters
