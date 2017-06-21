@@ -5,6 +5,7 @@ ICON = 'icon-default.jpg'
 BASE_URL = 'http://www.spike.com'
 
 # Pull the json from the HTML content to prevent any issues with redirects and/or bad urls
+RE_MANIFEST_URL = Regex('var triforceManifestURL = "(.+?)";', Regex.DOTALL)
 RE_MANIFEST = Regex('var triforceManifestFeed = (.+?);', Regex.DOTALL)
 
 EXCLUSIONS = []
@@ -39,7 +40,10 @@ def FeedMenu(title, url, thumb=''):
     feed_title = title
     try:
         content = HTTP.Request(url, cacheTime=CACHE_1DAY).content
-        zone_list = JSON.ObjectFromString(RE_MANIFEST.search(content).group(1))['manifest']['zones']
+        try: 
+            zone_list = JSON.ObjectFromString(RE_MANIFEST.search(content).group(1))['manifest']['zones']
+        except: 
+            zone_list = JSON.ObjectFromURL(RE_MANIFEST_URL.search(content).group(1))['manifest']['zones']
     except:
         return ObjectContainer(header="Incompatible", message="Unable to find video feeds for %s." % (url))
 
