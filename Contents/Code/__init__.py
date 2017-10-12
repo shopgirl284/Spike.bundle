@@ -71,13 +71,13 @@ def FeedMenu(title, url, thumb=''):
 
         # Create a menu for the main full episodes feed (ent_m151) for all videos and for each show
         if ent_code=='ent_m151':
-            try: title = json['result']['promo']['headline'].title()
+            try: title = json['result']['data']['headerText'].title()
             except: title = feed_title
             oc.add(DirectoryObject(key=Callback(ShowVideos, title=title, url=json_feed),
                 title=title,
                 thumb=Resource.ContentsOfURLWithFallback(url=thumb)
             ))
-            for item in json['result']['shows']:
+            for item in json['result']['data']['shows']:
                 oc.add(DirectoryObject(key=Callback(ShowVideos, title=item['title'], url=item['url']),
                     title=item['title']
                 ))
@@ -205,7 +205,11 @@ def ShowVideos(title, url):
     
     for video in videos:
 
-        vid_url = video['canonicalURL']
+        # Indivudual show video urls are under canonicalURL and full episode feeds are under itemURL
+        try: vid_url = video['canonicalURL']
+        except:
+            try: vid_url = video['itemURL']
+            except: continue
 
         # catch any bad links that get sent here
         if not ('/video-clips/') in vid_url and not ('/video-playlists/') in vid_url and not ('/full-episodes/') in vid_url and not ('/episodes/') in vid_url:
@@ -261,8 +265,11 @@ def ShowVideos(title, url):
             summary = video['description']
         ))
 
-    try: next_page = json['result']['nextPageURL']
-    except: next_page = None
+    # Individual show next pages are under results/nextPageURL and full episode feeds are under results/data
+    try: next_page = json['result']['data']['nextPageURL']
+    except: 
+        try: next_page = json['result']['nextPageURL']
+        except: next_page = None
 
     if next_page and len(oc) > 0:
 
